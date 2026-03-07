@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  semantic-search:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trademarkia-semantic-search
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount pre-built corpus + model data from host into container.
+      # Run `python scripts/setup_corpus.py` on the host first to populate ./data/
+      - ./data:/app/data
+    environment:
+      # Override any config defaults here
+      - EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - CHROMA_PERSIST_DIR=/app/data/chroma_db
+      - CLUSTER_MODEL_PATH=/app/data/gmm_model.joblib
+      - PCA_MODEL_PATH=/app/data/pca_model.joblib
+      - CACHE_SIMILARITY_THRESHOLD=0.85
+      - PORT=8000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

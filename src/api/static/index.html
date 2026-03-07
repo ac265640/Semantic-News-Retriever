@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trademarkia Semantic Search</title>
+  <meta name="description" content="Semantic search over the 20 Newsgroups corpus with fuzzy clustering and intelligent semantic cache." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & Base ──────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #080c14;
+      --surface:    #0e1520;
+      --surface-2:  #141d2e;
+      --surface-3:  #1c2640;
+      --border:     #1f2d46;
+      --border-2:   #2a3a58;
+      --accent:     #4f87ff;
+      --accent-glow:#4f87ff40;
+      --accent-2:   #7c4fff;
+      --green:      #22d3a5;
+      --amber:      #f59e0b;
+      --red:        #f25a5a;
+      --text:       #e8edf5;
+      --text-muted: #7a8ba8;
+      --text-dim:   #4a5a74;
+      --radius:     12px;
+      --radius-sm:  8px;
+      --shadow:     0 4px 24px #00000050;
+      --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated grid background ─────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(to right, #1a2640 1px, transparent 1px),
+        linear-gradient(to bottom, #1a2640 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, black 30%, transparent 100%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      top: -20%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 900px;
+      height: 500px;
+      background: radial-gradient(ellipse, #4f87ff18 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Layout ────────────────────────────────────── */
+    .layout {
+      position: relative;
+      z-index: 1;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    /* ── Header ────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 28px 0 48px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 48px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .logo-icon svg { width: 20px; height: 20px; }
+
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.2;
+    }
+
+    .logo-name {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+
+    .logo-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 500;
+    }
+
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+
+    .status-pill:hover { border-color: var(--border-2); color: var(--text); }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      transition: background var(--transition);
+    }
+
+    .status-dot.online { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .status-dot.error  { background: var(--red); }
+
+    /* ── Hero ──────────────────────────────────────── */
+    .hero {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      background: linear-gradient(135deg, #4f87ff12, #7c4fff12);
+      border: 1px solid #4f87ff30;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .hero-badge span { font-size: 10px; }
+
+    h1 {
+      font-size: clamp(28px, 5vw, 42px);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.15;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #e8edf5 30%, #7a8ba8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-desc {
+      font-size: 15px;
+      color: var(--text-muted);
+      max-width: 520px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+
+    /* ── Search Box ────────────────────────────────── */
+    .search-section { margin-bottom: 40px; }
+
+    .search-wrapper {
+      position: relative;
+      display: flex;
+      gap: 0;
+    }
+
+    .search-input {
+      flex: 1;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-right: none;
+      border-radius: var(--radius) 0 0 var(--radius);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      padding: 16px 20px;
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+
+    .search-input::placeholder { color: var(--text-dim); }
+
+    .search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .search-btn {
+      padding: 16px 28px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border: none;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      color: white;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity var(--transition), transform var(--transition);
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+      min-width: 130px;
+      justify-content: center;
+    }
+
+    .search-btn:hover { opacity: 0.88; }
+    .search-btn:active { transform: scale(0.98); }
+    .search-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .search-btn .btn-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+
+    .search-btn.loading .btn-spinner { display: block; }
+    .search-btn.loading .btn-text { display: none; }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── Results ───────────────────────────────────── */
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      animation: slideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      margin-bottom: 24px;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .result-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .cache-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .cache-badge.hit {
+      background: #22d3a518;
+      color: var(--green);
+      border: 1px solid #22d3a530;
+    }
+
+    .cache-badge.miss {
+      background: #4f87ff14;
+      color: var(--accent);
+      border: 1px solid #4f87ff30;
+    }
+
+    .cluster-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: var(--surface-3);
+      border: 1px solid var(--border-2);
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+    }
+
+    .sim-score {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .sim-score strong {
+      color: var(--amber);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+    }
+
+    .result-query-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .result-body { padding: 24px; }
+
+    .matched-query-row {
+      margin-bottom: 16px;
+      padding: 10px 14px;
+      background: var(--surface-2);
+      border-radius: var(--radius-sm);
+      border-left: 3px solid var(--amber);
+    }
+
+    .matched-query-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--amber);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .matched-query-text {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    .result-document {
+      font-size: 14px;
+      line-height: 1.8;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 280px;
+      overflow-y: auto;
+      padding: 16px;
+      background: #050912;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+
+    .result-document::-webkit-scrollbar { width: 5px; }
+    .result-document::-webkit-scrollbar-track { background: transparent; }
+    .result-document::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+
+    /* ── Error state ───────────────────────────────── */
+    .error-card {
+      background: #f25a5a0c;
+      border: 1px solid #f25a5a30;
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      animation: slideUp 0.3s ease;
+    }
+
+    .error-icon {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      background: #f25a5a18;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--red);
+    }
+
+    .error-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--red);
+      margin-bottom: 4px;
+    }
+
+    .error-msg { font-size: 13px; color: var(--text-muted); }
+
+    /* ── Stats Panel ───────────────────────────────── */
+    .panel-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .panel-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      transition: border-color var(--transition), transform var(--transition);
+    }
+
+    .stat-card:hover {
+      border-color: var(--border-2);
+      transform: translateY(-2px);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 26px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+
+    .stat-value.accent { color: var(--accent); }
+    .stat-value.green  { color: var(--green);  }
+    .stat-value.amber  { color: var(--amber);  }
+
+    .stat-unit { font-size: 13px; color: var(--text-dim); font-weight: 400; }
+
+    /* ── Hit rate bar ──────────────────────────────── */
+    .hitrate-bar-wrap { margin-bottom: 24px; }
+
+    .hitrate-bar-labels {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .hitrate-bar-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+
+    .hitrate-pct {
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      color: var(--green);
+    }
+
+    .hitrate-bar {
+      height: 7px;
+      background: var(--surface-3);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .hitrate-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--green));
+      border-radius: 999px;
+      transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+      width: 0%;
+    }
+
+    /* ── Action buttons ────────────────────────────── */
+    .actions-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .action-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition);
+      letter-spacing: 0.02em;
+    }
+
+    .action-btn:hover {
+      background: var(--surface-2);
+      border-color: var(--border-2);
+      color: var(--text);
+    }
+
+    .action-btn.danger:hover {
+      background: #f25a5a10;
+      border-color: #f25a5a40;
+      color: var(--red);
+    }
+
+    .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Query history ─────────────────────────────── */
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all var(--transition);
+      gap: 12px;
+    }
+
+    .history-item:hover {
+      background: var(--surface-2);
+      border-color: var(--accent);
+    }
+
+    .history-query {
+      font-size: 13px;
+      color: var(--text-muted);
+      flex: 1;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .history-badge {
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    .history-badge.hit  { background: #22d3a518; color: var(--green); }
+    .history-badge.miss { background: #4f87ff14; color: var(--accent); }
+
+    .history-time {
+      font-size: 11px;
+      color: var(--text-dim);
+      flex-shrink: 0;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Dividers ──────────────────────────────────── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 40px 0;
+    }
+
+    /* ── Health bar ────────────────────────────────── */
+    .health-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .health-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 12px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+
+    .health-key {
+      font-size: 10px;
+      color: var(--text-dim);
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .health-val {
+      font-size: 13px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+      word-break: break-all;
+    }
+
+    /* ── Empty / loading states ────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 48px 20px;
+      color: var(--text-dim);
+    }
+
+    .empty-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 16px;
+      opacity: 0.4;
+    }
+
+    .empty-text { font-size: 14px; line-height: 1.6; }
+
+    /* ── Toast ─────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      background: var(--surface-2);
+      border: 1px solid var(--border-2);
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      box-shadow: var(--shadow);
+      z-index: 1000;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+    }
+
+    #toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* ── Responsive ────────────────────────────────── */
+    @media (max-width: 600px) {
+      header { flex-direction: column; align-items: flex-start; gap: 16px; }
+      .search-wrapper { flex-direction: column; }
+      .search-input { border-right: 1.5px solid var(--border); border-bottom: none; border-radius: var(--radius) var(--radius) 0 0; }
+      .search-btn { border-radius: 0 0 var(--radius) var(--radius); width: 100%; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ── Header ── -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m21 21-4.35-4.35" />
+          <path d="M11 8v6M8 11h6" opacity="0.6"/>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <span class="logo-name">Trademarkia</span>
+        <span class="logo-sub">Semantic Search</span>
+      </div>
+    </div>
+    <div class="status-pill" id="statusPill" onclick="checkHealth()">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Checking…</span>
+    </div>
+  </header>
+
+  <!-- ── Hero ── -->
+  <section class="hero">
+    <div class="hero-badge">
+      <span>⬡</span> 20 Newsgroups Corpus · GMM Fuzzy Clustering
+    </div>
+    <h1>Intelligent Semantic Search<br/>with Smart Caching</h1>
+    <p class="hero-desc">
+      Query the 20 Newsgroups corpus using natural language.
+      Embeddings are matched via vector similarity, routed through
+      GMM cluster buckets, and served from a semantic cache on repeat queries.
+    </p>
+  </section>
+
+  <!-- ── Search ── -->
+  <section class="search-section">
+    <div class="search-wrapper">
+      <input
+        id="searchInput"
+        class="search-input"
+        type="text"
+        placeholder="e.g. what are the best graphics cards for gaming?"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button class="search-btn" id="searchBtn" onclick="doQuery()">
+        <div class="btn-spinner"></div>
+        <span class="btn-text">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px">
+            <circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          Search
+        </span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ── Result output ── -->
+  <div id="resultArea"></div>
+
+  <div class="divider"></div>
+
+  <!-- ── Cache Stats ── -->
+  <section>
+    <div class="panel-title">
+      <span class="panel-label">Cache Statistics</span>
+      <div class="actions-row">
+        <button class="action-btn" onclick="refreshStats()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
+          </svg>
+          Refresh
+        </button>
+        <button class="action-btn danger" onclick="flushCache()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+          </svg>
+          Flush Cache
+        </button>
+      </div>
+    </div>
+
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-label">Entries</div>
+        <div class="stat-value accent" id="statEntries">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Hits</div>
+        <div class="stat-value green" id="statHits">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Misses</div>
+        <div class="stat-value" id="statMisses">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Threshold τ</div>
+        <div class="stat-value amber" id="statThreshold">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Active Clusters</div>
+        <div class="stat-value" id="statClusters">—</div>
+      </div>
+    </div>
+
+    <div class="hitrate-bar-wrap" id="hitrateWrap" style="display:none;">
+      <div class="hitrate-bar-labels">
+        <span class="hitrate-bar-label">Hit Rate</span>
+        <span class="hitrate-pct" id="hitrateText">0%</span>
+      </div>
+      <div class="hitrate-bar">
+        <div class="hitrate-fill" id="hitrateFill"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ── Query History ── -->
+  <section>
+    <div class="panel-title">
+      <span class="panel-label">Recent Queries</span>
+      <button class="action-btn danger" onclick="clearHistory()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+        </svg>
+        Clear
+      </button>
+    </div>
+    <div id="historyList">
+      <div class="empty-state">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+        </svg>
+        <p class="empty-text">No queries yet. Try searching for something above.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ── Health Info ── -->
+  <section>
+    <div class="panel-title">
+      <span class="panel-label">Service Health</span>
+      <button class="action-btn" onclick="checkHealth()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+        </svg>
+        Ping
+      </button>
+    </div>
+    <div class="health-bar" id="healthBar">
+      <div class="health-item">
+        <div class="health-key">Status</div>
+        <div class="health-val" id="hStatus">—</div>
+      </div>
+      <div class="health-item">
+        <div class="health-key">Corpus Size</div>
+        <div class="health-val" id="hCorpus">—</div>
+      </div>
+      <div class="health-item">
+        <div class="health-key">Cache Entries</div>
+        <div class="health-val" id="hCache">—</div>
+      </div>
+      <div class="health-item">
+        <div class="health-key">Clusters (K)</div>
+        <div class="health-val" id="hClusters">—</div>
+      </div>
+      <div class="health-item">
+        <div class="health-key">Embedding Model</div>
+        <div class="health-val" id="hModel">—</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ── Toast ── -->
+<div id="toast"></div>
+
+<script>
+  // ── Config ───────────────────────────────────────
+  const API_BASE = 'http://localhost:8000';
+  const MAX_HISTORY = 20;
+
+  // ── State ────────────────────────────────────────
+  let queryHistory = [];
+
+  // ── Init ─────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    checkHealth();
+    refreshStats();
+    renderHistory();
+
+    document.getElementById('searchInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doQuery();
+    });
+  });
+
+  // ── Toast ─────────────────────────────────────────
+  function showToast(msg, duration = 2500) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(() => t.classList.remove('show'), duration);
+  }
+
+  // ── Health ────────────────────────────────────────
+  async function checkHealth() {
+    const dot = document.getElementById('statusDot');
+    const txt = document.getElementById('statusText');
+    dot.className = 'status-dot';
+    txt.textContent = 'Checking…';
+
+    try {
+      const res = await fetch(`${API_BASE}/health`);
+      if (!res.ok) throw new Error('Non-OK response');
+      const data = await res.json();
+
+      dot.className = 'status-dot online';
+      txt.textContent = 'Online';
+
+      document.getElementById('hStatus').textContent   = data.status ?? '—';
+      document.getElementById('hCorpus').textContent   = data.corpus_size?.toLocaleString() ?? '—';
+      document.getElementById('hCache').textContent    = data.cache_entries ?? '—';
+      document.getElementById('hClusters').textContent = data.n_clusters ?? '—';
+      document.getElementById('hModel').textContent    = data.embedding_model ?? '—';
+    } catch {
+      dot.className = 'status-dot error';
+      txt.textContent = 'Offline';
+      document.getElementById('hStatus').textContent = 'unreachable';
+    }
+  }
+
+  // ── Stats ─────────────────────────────────────────
+  async function refreshStats() {
+    try {
+      const res = await fetch(`${API_BASE}/cache/stats`);
+      if (!res.ok) return;
+      const d = await res.json();
+
+      document.getElementById('statEntries').textContent   = d.total_entries ?? '—';
+      document.getElementById('statHits').textContent      = d.hit_count ?? '—';
+      document.getElementById('statMisses').textContent    = d.miss_count ?? '—';
+      document.getElementById('statThreshold').textContent = d.threshold?.toFixed(2) ?? '—';
+      document.getElementById('statClusters').textContent  = d.active_clusters ?? '—';
+
+      const rate = d.hit_rate ?? 0;
+      const pct  = (rate * 100).toFixed(1);
+      const wrap = document.getElementById('hitrateWrap');
+      if (d.total_entries > 0 || d.hit_count > 0 || d.miss_count > 0) {
+        wrap.style.display = 'block';
+        document.getElementById('hitrateText').textContent = `${pct}%`;
+        setTimeout(() => {
+          document.getElementById('hitrateFill').style.width = `${pct}%`;
+        }, 50);
+      } else {
+        wrap.style.display = 'none';
+      }
+    } catch { /* silently ignore if server not up */ }
+  }
+
+  // ── Flush ────────────────────────────────────────
+  async function flushCache() {
+    try {
+      const res = await fetch(`${API_BASE}/cache`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed');
+      showToast('✓ Cache flushed successfully');
+      refreshStats();
+      checkHealth();
+    } catch {
+      showToast('✗ Failed to flush cache');
+    }
+  }
+
+  // ── Query ─────────────────────────────────────────
+  async function doQuery() {
+    const input = document.getElementById('searchInput');
+    const btn   = document.getElementById('searchBtn');
+    const query = input.value.trim();
+    if (!query) { input.focus(); return; }
+
+    btn.disabled = true;
+    btn.classList.add('loading');
+    setResultArea('loading');
+
+    try {
+      const res = await fetch(`${API_BASE}/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      renderResult(data);
+      addHistory({ query, cache_hit: data.cache_hit, time: new Date() });
+      refreshStats();
+      checkHealth();
+    } catch (e) {
+      setResultArea('error', e.message);
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('loading');
+    }
+  }
+
+  // ── Render result ─────────────────────────────────
+  function renderResult(data) {
+    const area = document.getElementById('resultArea');
+
+    const cacheBadge = data.cache_hit
+      ? `<span class="cache-badge hit">⚡ Cache Hit</span>`
+      : `<span class="cache-badge miss">🔍 Cache Miss</span>`;
+
+    const clusterTag = `<span class="cluster-tag">Cluster #${data.dominant_cluster}</span>`;
+
+    const simScore = data.similarity_score != null
+      ? `<span class="sim-score">Similarity: <strong>${(data.similarity_score * 100).toFixed(1)}%</strong></span>`
+      : '';
+
+    const matchedQueryHtml = data.matched_query
+      ? `<div class="matched-query-row">
+          <div class="matched-query-label">Matched Cached Query</div>
+          <div class="matched-query-text">"${escapeHtml(data.matched_query)}"</div>
+        </div>`
+      : '';
+
+    area.innerHTML = `
+      <div class="result-card">
+        <div class="result-header">
+          <div class="result-meta">
+            ${cacheBadge}
+            ${clusterTag}
+            ${simScore}
+          </div>
+          <span class="result-query-label">${escapeHtml(truncate(data.query, 60))}</span>
+        </div>
+        <div class="result-body">
+          ${matchedQueryHtml}
+          <pre class="result-document">${escapeHtml(data.result)}</pre>
+        </div>
+      </div>`;
+  }
+
+  function setResultArea(state, msg = '') {
+    const area = document.getElementById('resultArea');
+    if (state === 'loading') {
+      area.innerHTML = `
+        <div class="result-card" style="padding:32px;text-align:center">
+          <div style="display:inline-flex;align-items:center;gap:10px;color:var(--text-muted);font-size:14px;">
+            <div style="width:18px;height:18px;border:2px solid var(--border-2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;"></div>
+            Embedding &amp; retrieving…
+          </div>
+        </div>`;
+    } else if (state === 'error') {
+      area.innerHTML = `
+        <div class="error-card">
+          <div class="error-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <div>
+            <div class="error-title">Request Failed</div>
+            <div class="error-msg">${escapeHtml(msg) || 'Could not reach the API. Make sure the server is running on port 8000.'}</div>
+          </div>
+        </div>`;
+    }
+  }
+
+  // ── History ───────────────────────────────────────
+  function addHistory(entry) {
+    queryHistory.unshift(entry);
+    if (queryHistory.length > MAX_HISTORY) queryHistory.pop();
+    renderHistory();
+  }
+
+  function renderHistory() {
+    const el = document.getElementById('historyList');
+    if (!queryHistory.length) {
+      el.innerHTML = `
+        <div class="empty-state">
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+          <p class="empty-text">No queries yet. Try searching for something above.</p>
+        </div>`;
+      return;
+    }
+
+    el.innerHTML = `<div class="history-list">` +
+      queryHistory.map((h, i) => `
+        <div class="history-item" onclick="replayQuery(${i})">
+          <span class="history-query">${escapeHtml(h.query)}</span>
+          <span class="history-badge ${h.cache_hit ? 'hit' : 'miss'}">${h.cache_hit ? 'Hit' : 'Miss'}</span>
+          <span class="history-time">${formatTime(h.time)}</span>
+        </div>`
+      ).join('') + `</div>`;
+  }
+
+  function replayQuery(idx) {
+    const q = queryHistory[idx]?.query;
+    if (!q) return;
+    document.getElementById('searchInput').value = q;
+    doQuery();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function clearHistory() {
+    queryHistory = [];
+    renderHistory();
+    showToast('History cleared');
+  }
+
+  // ── Utilities ─────────────────────────────────────
+  function escapeHtml(s = '') {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function truncate(s, n) {
+    return s.length > n ? s.slice(0, n) + '…' : s;
+  }
+
+  function formatTime(d) {
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+</script>
+</body>
+</html>

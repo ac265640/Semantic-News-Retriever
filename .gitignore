@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.Python
+
+# Virtual environment
+venv/
+.venv/
+env/
+ENV/
+
+# Environment variables
+.env
+
+# Data directory (ChromaDB + model files — too large for git)
+data/
+
+# Jupyter notebooks output
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# MacOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Distribution
+build/
+dist/
+*.egg-info/
+
+# Media / demo files
+*.mp4
+*.webp
+*.mov
