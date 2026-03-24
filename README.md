@@ -1,4 +1,4 @@
-# Trademarkia AI/ML Engineer Assignment — Semantic Search System
+# Semantic-News-Retriever — Semantic Search System
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)](https://fastapi.tiangolo.com)
 [![sentence-transformers](https://img.shields.io/badge/sentence--transformers-3.4-blue)](https://www.sbert.net)
