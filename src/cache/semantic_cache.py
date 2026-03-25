@@ -39,7 +39,7 @@ class SemanticCache:
         cluster_probs: np.ndarray,
     ) -> Optional[dict]:
         with self._lock:
-            sorted_clusters = np.argsort(cluster_probs)[::-1]
+            sorted_clusters = np.argsort(cluster_probs)[::-1] #Sort Clusters by Probability
 
             best_sim: float = 0.0
             best_entry: Optional[CacheEntry] = None
@@ -88,6 +88,7 @@ class SemanticCache:
             result=result,
             cluster_probs=cluster_probs,
         )
+        #Only one thread can access cache at a time
         with self._lock:
             if dominant not in self._buckets:
                 self._buckets[dominant] = []

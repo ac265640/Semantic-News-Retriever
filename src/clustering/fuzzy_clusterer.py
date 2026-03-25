@@ -31,7 +31,7 @@ class FuzzyClusterer:
 
         self.pca: Optional[PCA] = None
         self.gmm: Optional[GaussianMixture] = None
-
+    # reducing dimension , pca
     def _reduce(self, embeddings: np.ndarray) -> np.ndarray:
         assert self.pca is not None, "PCA not fitted — call fit() or load() first."
         return self.pca.transform(embeddings)

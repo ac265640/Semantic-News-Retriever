@@ -16,6 +16,8 @@ class ChromaStore:
             path=persist_dir,
             settings=Settings(anonymized_telemetry=False),
         )
+        #Use HNSW index
+#Use cosine similarity as distance metric
         self.collection = self.client.get_or_create_collection(
             name=collection_name,
             metadata={"hnsw:space": "cosine"},

@@ -17,6 +17,7 @@ class Embedder:
         print(f"[Embedder] Ready — embedding dim={self.dim}")
 
     @classmethod
+    #Singleton for the embedder
     def get_instance(cls) -> "Embedder":
         if cls._instance is None:
             cls._instance = cls()
@@ -30,12 +31,12 @@ class Embedder:
     ) -> np.ndarray:
         if isinstance(texts, str):
             texts = [texts]
-
+#Each sentence becomes a vector of numbers
         embeddings = self.model.encode(
             texts,
             batch_size=batch_size,
             show_progress_bar=show_progress,
-            normalize_embeddings=True,
+            normalize_embeddings=True, #automatically normalizes vectors.
             convert_to_numpy=True,
         )
         return embeddings.astype(np.float32)
